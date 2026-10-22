@@ -1,0 +1,87 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  STAFF
+}
+
+enum Currency {
+  NGN
+  USD
+  EURO
+  POUNDS
+}
+
+enum ReceiptStatus {
+  IN_TRANSIT @map("In-transit")
+  DELIVERED  @map("Delivered")
+  PAID       @map("Paid")
+  REFUNDED   @map("Refunded")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  password  String   // Added for the generated password login system
+  role      Role     @default(STAFF) // SUPER_ADMIN, ADMIN, or STAFF
+  createdAt DateTime @default(now())
+  active      Boolean     @default(true)
+  receipts  Receipt[]
+
+  @@map("users")
+}
+
+model Receipt {
+  id            Int           @id @default(autoincrement())
+  
+  // Safe User Deletion Fields
+  createdById   Int?          // Nullable so deleting a user won't break or block deletion
+  createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdByName String        // Permanent snapshot name so records remain intact if user is deleted
+
+  customerName  String        @db.VarChar(80) @map("customer_name")
+  customerEmail String?       @db.VarChar(60) @map("customer_email")
+  customerPhone String?       @db.VarChar(14) @map("customer_phone")
+  paidDate      DateTime      @db.Date @map("paid_date")
+  receivedDate  DateTime?     @db.Date @map("received_date")
+  trackingId    String?       @unique @db.VarChar(15) @map("tracking_id")
+  status        ReceiptStatus @default(PAID)
+  currency      Currency      @default(NGN)
+  shippingFee    Decimal      @default(0.00) @map("shipping_fee") @db.Decimal(10, 2)
+  subtotal       Decimal      @default(0.00) @db.Decimal(10, 2)
+  total          Decimal      @default(0.00) @db.Decimal(10, 2)
+  totalProfit    Decimal      @default(0.00) @map("total_profit") @db.Decimal(10, 2)
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated")
+
+  // Relations (Items cascade delete if receipt is deleted)
+  items         Item[]        @relation("ReceiptItems")
+
+  @@index([createdAt(sort: Desc)])
+  @@map("receipts")
+}
+
+model Item {
+  id           Int      @id @default(autoincrement())
+  receiptId    Int
+  receipt      Receipt  @relation("ReceiptItems", fields: [receiptId], references: [id], onDelete: Cascade)
+  itemName     String   @db.VarChar(80)
+  quantity     Int      @default(1)
+  costPrice    Decimal   @map("cost_price") @db.Decimal(10, 2)
+  sellingPrice Decimal   @map("selling_price") @db.Decimal(10, 2)
+  totalAmount  Decimal   @map("total_amount") @db.Decimal(10, 2)
+  profit       Decimal   @default(0.00) @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@map("items")
+}
